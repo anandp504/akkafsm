@@ -10,7 +10,7 @@ object Boot extends App {
   Thread.sleep(10000)
 
   for(i <- 1 to 500) {
-    router ! s"msg-$i"
+    router ! Job(s"msg-$i")
   }
 
 }

@@ -22,7 +22,9 @@ case object ProcessMessages extends Message
 case class Data(msg: String) extends Message
 case object Uninitialized extends Message
 
-case class StateMachineData(msgQueue: mutable.Queue[String])
+case class Job(input: String)
+
+case class StateMachineData(msgQueue: mutable.Queue[Job])
 
 
 /**
@@ -35,7 +37,7 @@ class WorkerFSM extends Stash with FSM[WorkerState, StateMachineData] with Actor
 
   val router: ActorRef = RouterService(context.system).instance
 
-  startWith(Idle, StateMachineData(msgQueue = mutable.Queue[String]()))
+  startWith(Idle, StateMachineData(msgQueue = mutable.Queue[Job]()))
 
   onTransition {
 
@@ -50,8 +52,9 @@ class WorkerFSM extends Stash with FSM[WorkerState, StateMachineData] with Actor
 
   onTermination {
     case StopEvent(FSM.Shutdown, state, d @ StateMachineData(msgQueue)) => {
-      log.info("Worker shutdown. Sending queued messages back to router...")
       if(msgQueue.nonEmpty) {
+        log.info("Worker shutdown. Sending queued messages back to router...")
+        log.info("msgQueue = " + msgQueue)
         msgQueue.foreach(msg => router ! msg)
       }
     }
@@ -66,7 +69,7 @@ class WorkerFSM extends Stash with FSM[WorkerState, StateMachineData] with Actor
       router ! RequestWork
       stay()
     }
-    case Event(job: String, d @ StateMachineData(msgQueue)) => {
+    case Event(job: Job, d @ StateMachineData(msgQueue)) => {
       goto(Active) using d.copy(msgQueue += job)
     }
     case Event(ProcessMessages, d @ StateMachineData(msgQueue)) if msgQueue.nonEmpty => {
@@ -80,7 +83,7 @@ class WorkerFSM extends Stash with FSM[WorkerState, StateMachineData] with Actor
    * execution. When a Job is submitted for execution, the state is changed to WaitingForCompletion.
    */
   when(Active) {
-    case Event(job: String, d @ StateMachineData(msgQueue)) => {
+    case Event(job: Job, d @ StateMachineData(msgQueue)) => {
       stash()
       self ! ProcessMessages
       stay()
@@ -113,7 +116,7 @@ class WorkerFSM extends Stash with FSM[WorkerState, StateMachineData] with Actor
     case Event(Completed, d @ StateMachineData(msgQueue)) if !msgQueue.nonEmpty => {
       goto(Idle)
     }
-    case Event(job: String, d @ StateMachineData(msgQueue)) => {
+    case Event(job: Job, d @ StateMachineData(msgQueue)) => {
       stay() using d.copy(msgQueue += job)
     }
     case Event(ProcessMessages, _) => {
@@ -126,10 +129,10 @@ class WorkerFSM extends Stash with FSM[WorkerState, StateMachineData] with Actor
     }
   }
 
-  def processJob(msg: String): Future[Unit] = Future {
+  def processJob(msg: Job): Future[Unit] = Future {
     //log.info(s"Processing msg $msg ...")
     Thread.sleep(2000)
-    log.info(s"Completed processing of $msg")
+    log.info(s"Completed processing of ${msg.input}")
   }
 
 }

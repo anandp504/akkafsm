@@ -7,7 +7,7 @@ import scala.collection.mutable
 
 class RouterActor extends Actor with ActorLogging {
 
-  val messageBuffer = mutable.Queue[String]()
+  val messageBuffer = mutable.Queue[Job]()
 
   var router = {
     log.info("Scheduled Report Router Initialized...")
@@ -20,7 +20,8 @@ class RouterActor extends Actor with ActorLogging {
   }
 
   def receive = {
-    case job: String => {
+
+    case job: Job => {
       messageBuffer.enqueue(job)
       if (messageBuffer.nonEmpty) {
         router.route(Broadcast(WorkAvailable), self)
