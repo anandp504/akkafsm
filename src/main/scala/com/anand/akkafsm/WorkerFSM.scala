@@ -70,6 +70,7 @@ class WorkerFSM extends Stash with FSM[WorkerState, StateMachineData] with Actor
       stay()
     }
     case Event(job: Job, d @ StateMachineData(msgQueue)) => {
+      self ! ProcessMessages
       goto(Active) using d.copy(msgQueue += job)
     }
     case Event(ProcessMessages, d @ StateMachineData(msgQueue)) if msgQueue.nonEmpty => {
@@ -97,7 +98,7 @@ class WorkerFSM extends Stash with FSM[WorkerState, StateMachineData] with Actor
       goto(WaitingForCompletion) using d
     }
     case Event(WorkAvailable, _) => {
-      log.debug("Worker is busy...")
+      log.debug(s"Worker ${self.path.name} is busy...")
       stay()
     }
 
@@ -124,7 +125,7 @@ class WorkerFSM extends Stash with FSM[WorkerState, StateMachineData] with Actor
       stay()
     }
     case Event(WorkAvailable, _) => {
-      log.debug("Worker is busy...")
+      log.debug(s"Worker ${self.path.name} is busy...")
       stay()
     }
   }
