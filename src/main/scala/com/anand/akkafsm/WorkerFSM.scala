@@ -65,18 +65,21 @@ class WorkerFSM extends Stash with FSM[WorkerState, StateMachineData] with Actor
    * changes the state of the Worker to Active and starts processing.
    */
   when(Idle) {
-    case Event(WorkAvailable, _) => {
+    case Event(WorkAvailable, _) =>
       router ! RequestWork
       stay()
-    }
-    case Event(job: Job, d @ StateMachineData(msgQueue)) => {
+
+    case Event(RequestWork, _) =>
+      router ! RequestWork
+      stay()
+
+    case Event(job: Job, d @ StateMachineData(msgQueue)) =>
       self ! ProcessMessages
       goto(Active) using d.copy(msgQueue += job)
-    }
-    case Event(ProcessMessages, d @ StateMachineData(msgQueue)) if msgQueue.nonEmpty => {
+
+    case Event(ProcessMessages, d @ StateMachineData(msgQueue)) if msgQueue.nonEmpty =>
       self ! ProcessMessages
       goto(Active)
-    }
   }
 
   /**
@@ -84,11 +87,11 @@ class WorkerFSM extends Stash with FSM[WorkerState, StateMachineData] with Actor
    * execution. When a Job is submitted for execution, the state is changed to WaitingForCompletion.
    */
   when(Active) {
-    case Event(job: Job, d @ StateMachineData(msgQueue)) => {
+    case Event(job: Job, d @ StateMachineData(msgQueue)) =>
       stash()
       self ! ProcessMessages
       stay()
-    }
+
     case Event(ProcessMessages, d @ StateMachineData(msgQueue)) if msgQueue.nonEmpty => {
       val job = msgQueue.dequeue()
       processJob(job).map {
@@ -97,10 +100,10 @@ class WorkerFSM extends Stash with FSM[WorkerState, StateMachineData] with Actor
       }
       goto(WaitingForCompletion) using d
     }
-    case Event(WorkAvailable, _) => {
+
+    case Event(WorkAvailable, _) =>
       log.debug(s"Worker ${self.path.name} is busy...")
       stay()
-    }
 
   }
 
@@ -110,24 +113,24 @@ class WorkerFSM extends Stash with FSM[WorkerState, StateMachineData] with Actor
    * current Job is completed, it will be queued up.
    */
   when(WaitingForCompletion) {
-    case Event(Completed, d @ StateMachineData(msgQueue)) if msgQueue.nonEmpty => {
+    case Event(Completed, d @ StateMachineData(msgQueue)) if msgQueue.nonEmpty =>
       self ! ProcessMessages
       goto(Idle)
-    }
-    case Event(Completed, d @ StateMachineData(msgQueue)) if !msgQueue.nonEmpty => {
+
+    case Event(Completed, d @ StateMachineData(msgQueue)) if !msgQueue.nonEmpty =>
+      self ! RequestWork
       goto(Idle)
-    }
-    case Event(job: Job, d @ StateMachineData(msgQueue)) => {
+
+    case Event(job: Job, d @ StateMachineData(msgQueue)) =>
       stay() using d.copy(msgQueue += job)
-    }
-    case Event(ProcessMessages, _) => {
+
+    case Event(ProcessMessages, _) =>
       log.debug(s"Worker ${self.path.name} is busy...")
       stay()
-    }
-    case Event(WorkAvailable, _) => {
+
+    case Event(WorkAvailable, _) =>
       log.debug(s"Worker ${self.path.name} is busy...")
       stay()
-    }
   }
 
   def processJob(msg: Job): Future[Unit] = Future {
